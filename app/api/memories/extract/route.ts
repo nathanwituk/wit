@@ -45,10 +45,12 @@ Category guide:
     });
 
     const rawText = response.content[0].type === 'text' ? response.content[0].text.trim() : '[]';
+    // Strip markdown code fences if Claude wrapped the JSON
+    const cleanText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
 
     let memories: Memory[] = [];
     try {
-      const parsed = JSON.parse(rawText);
+      const parsed = JSON.parse(cleanText);
       memories = Array.isArray(parsed) ? parsed.filter(
         (m): m is Memory =>
           CATEGORIES.includes(m.category) &&
