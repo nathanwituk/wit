@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verify } from 'otplib';
+import { verifyTOTP } from '@/lib/totp';
 import { cookies } from 'next/headers';
 
 export async function POST(req: NextRequest) {
@@ -10,9 +10,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'TOTP not configured' }, { status: 400 });
   }
 
-  const isValid = await verify({ token, secret });
-
-  if (!isValid) {
+  // window=0 — only the exact current 30-second code is valid
+  if (!verifyTOTP(token, secret, 0)) {
     return NextResponse.json({ error: 'Invalid code' }, { status: 401 });
   }
 

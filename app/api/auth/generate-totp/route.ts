@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { generateSecret, generateURI } from 'otplib';
+import { generateSecret } from '@/lib/totp';
 
 export async function GET() {
   if (process.env.TOTP_SECRET) {
@@ -7,11 +7,7 @@ export async function GET() {
   }
 
   const secret = generateSecret();
-  const otpauth = await generateURI({
-    secret,
-    label: 'nathanwituk@gmail.com',
-    issuer: 'Wit',
-  });
+  const otpauth = `otpauth://totp/Wit:nathanwituk%40gmail.com?secret=${secret}&issuer=Wit&algorithm=SHA1&digits=6&period=30`;
 
   return NextResponse.json({ secret, otpauth });
 }

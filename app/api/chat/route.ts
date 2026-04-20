@@ -18,7 +18,8 @@ export async function POST(req: NextRequest) {
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
     return NextResponse.json({ text });
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     console.error(err);
-    return NextResponse.json({ error: 'Failed to get response from Wit' }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

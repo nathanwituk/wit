@@ -45,7 +45,8 @@ export default function Dashboard() {
         }),
       });
       const data = await res.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.text }]);
+      const content = data.text || data.error || 'No response — try again.';
+      setMessages(prev => [...prev, { role: 'assistant', content }]);
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Something went wrong — try again.' }]);
     } finally {

@@ -23,18 +23,12 @@ export default function Setup2FA() {
 
   async function verify() {
     setError('');
-    const res = await fetch('/api/auth/verify-totp', {
+    const res = await fetch('/api/auth/setup-verify-totp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ token, secret }),
     });
     if (res.ok) {
-      // Save secret to .env.local via a setup endpoint (dev only)
-      await fetch('/api/auth/save-totp-secret', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ secret }),
-      });
       router.push('/dashboard');
     } else {
       setError('Invalid code — try again');
