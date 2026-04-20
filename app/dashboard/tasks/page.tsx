@@ -309,8 +309,19 @@ function TaskCard({ task, allTasks, onUpdate, onDelete }: {
 }
 
 function SuggestionCard({ suggestion, onAdd }: { suggestion: Task & { why?: string }, onAdd: (s: Task) => void }) {
+  const [state, setState] = useState<'idle' | 'adding' | 'added'>('idle');
+
+  function handleAdd() {
+    if (state !== 'idle') return;
+    setState('adding');
+    onAdd(suggestion);
+    setTimeout(() => setState('added'), 300);
+  }
+
   return (
-    <div className="flex-shrink-0 w-72 bg-[#141414] rounded-2xl border border-[#1e1e1e] p-4 flex flex-col gap-3">
+    <div className={`flex-shrink-0 w-72 rounded-2xl border p-4 flex flex-col gap-3 transition-all duration-300 ${
+      state === 'added' ? 'border-white/20 bg-white/5 scale-[0.97] opacity-60' : 'border-[#1e1e1e] bg-[#141414]'
+    }`}>
       <div className="flex items-start justify-between gap-2">
         <p className="text-white text-sm font-medium leading-snug flex-1">{suggestion.title}</p>
         <span className="text-[10px] px-2 py-0.5 rounded-full flex-shrink-0 font-semibold"
@@ -330,9 +341,15 @@ function SuggestionCard({ suggestion, onAdd }: { suggestion: Task & { why?: stri
           </span>
         )}
       </div>
-      <button onClick={() => onAdd(suggestion)}
-        className="w-full bg-white text-[#0a0a0a] text-xs font-semibold rounded-xl py-2.5 hover:bg-[#e0e0e0] transition-colors active:scale-[0.98]">
-        + Add to Tasks
+      <button onClick={handleAdd} disabled={state !== 'idle'}
+        className={`w-full text-xs font-semibold rounded-xl py-2.5 transition-all duration-200 active:scale-[0.97] ${
+          state === 'added'
+            ? 'bg-white/10 text-white/60 cursor-default'
+            : state === 'adding'
+            ? 'bg-[#e0e0e0] text-[#0a0a0a]/60 cursor-default'
+            : 'bg-white text-[#0a0a0a] hover:bg-[#e0e0e0]'
+        }`}>
+        {state === 'added' ? '✓ Added' : state === 'adding' ? 'Adding...' : '+ Add to Tasks'}
       </button>
     </div>
   );
@@ -364,6 +381,11 @@ export default function TasksPage() {
   }
 
   async function addSuggestion(s: Task) {
+    // Optimistically add immediately with a temp id
+    const tempId = `temp-${Date.now()}`;
+    const optimistic = { ...s, id: tempId, status: 'todo' as const, source: 'suggested' };
+    setTasks(prev => [optimistic, ...prev]);
+
     const res = await fetch('/api/tasks/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -371,8 +393,12 @@ export default function TasksPage() {
     });
     if (res.ok) {
       const d = await res.json();
-      setTasks(prev => [d.task, ...prev]);
+      // Replace temp with real task
+      setTasks(prev => prev.map(t => t.id === tempId ? d.task : t));
       setSuggestions(prev => prev.filter(x => x.title !== s.title));
+    } else {
+      // Rollback on failure
+      setTasks(prev => prev.filter(t => t.id !== tempId));
     }
   }
 
