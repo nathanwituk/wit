@@ -19,16 +19,26 @@ export async function GET() {
     // Get memories for context
     const { data: memories } = await supabase
       .from('memories')
-      .select('category, key, value')
+      .select('category, key, value, created_at')
       .order('created_at', { ascending: false })
       .limit(80);
 
-    const memContext = (memories || [])
+    const allMemories = memories || [];
+
+    // Pull out today's activity log separately for prominent context
+    const today = new Date().toISOString().slice(0, 10);
+    const todayActivity = allMemories
+      .filter(m => m.category === 'activity' && m.created_at?.startsWith(today))
+      .map(m => `• ${m.value}`)
+      .join('\n');
+
+    const memContext = allMemories
+      .filter(m => m.category !== 'activity')
       .map(m => `[${m.category}] ${m.key}: ${m.value}`)
       .join('\n');
 
-    const today = new Date().toISOString().slice(0, 10);
     const dayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    const timeOfDay = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 
     const res = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -36,14 +46,16 @@ export async function GET() {
       system: `You are Nathan's intelligent task suggester. Generate highly personalized task suggestions based on his full context. Return ONLY a valid JSON array, no markdown.`,
       messages: [{
         role: 'user',
-        content: `Today is ${dayOfWeek}, ${today}.
+        content: `Today is ${dayOfWeek}, ${today}. Current time: ${timeOfDay}.
 
-Nathan's context:
+${todayActivity ? `WHAT NATHAN HAS BEEN DOING TODAY:\n${todayActivity}\n\nIMPORTANT: Factor this into your suggestions. If he's been coding all morning, suggest a break/gym task. If he skipped his normal gym time to code, note that. Suggest tasks that fit the current energy and context.` : ''}
+
+Nathan's full context:
 ${memContext}
 
 Already in task list: ${existingTitles || 'none'}
 
-Generate 6 smart task suggestions Nathan should do soon. Use his real projects, goals, and schedule.
+Generate 6 smart task suggestions Nathan should do soon. Use his real projects, goals, and schedule. Be specific — reference his actual projects (Wit, portfolio, Speedster, classes, etc).
 
 Return JSON array: [{
   "title": string,
@@ -55,7 +67,7 @@ Return JSON array: [{
   "friction_score": 1-5,
   "estimated_minutes": number,
   "due_date": YYYY-MM-DD or null,
-  "why": string (1 sentence — why this is suggested now),
+  "why": string (1 sentence — why this makes sense RIGHT NOW given today's activity),
   "blocked_by": []
 }]`
       }],
