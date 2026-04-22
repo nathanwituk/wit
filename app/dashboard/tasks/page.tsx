@@ -91,6 +91,42 @@ function hourLabel(h: number): string {
   return h > 12 ? `${h-12}pm` : `${h}am`;
 }
 
+// Find the next open 30-min slot on a given date, avoiding existing scheduled tasks
+// `reservedSlots` lets callers pre-reserve slots (so multiple suggestions don't collide)
+function findNextAvailableSlot(
+  tasks: Task[],
+  date: string,
+  durationMins: number = 30,
+  reservedSlots: Array<{ start: number; end: number }> = []
+): string {
+  const now = new Date();
+  const isToday_ = date === localDateStr();
+
+  // Start from now (rounded up to next 30 min) if today, else 8am
+  let startMins = isToday_
+    ? Math.ceil((now.getHours() * 60 + now.getMinutes()) / 30) * 30
+    : 8 * 60;
+  startMins = Math.max(startMins, 6 * 60); // never before 6am
+
+  const scheduled = tasks.filter(
+    t => t.due_date === date && t.scheduled_time && t.status !== 'done' && t.status !== 'cancelled'
+  ).map(t => ({
+    start: timeToMinutes(t.scheduled_time!),
+    end: timeToMinutes(t.scheduled_time!) + (t.estimated_minutes || 30),
+  }));
+
+  const allBlocked = [...scheduled, ...reservedSlots];
+
+  for (let slot = startMins; slot < 22 * 60; slot += 30) {
+    const slotEnd = slot + durationMins;
+    const hasConflict = allBlocked.some(b => b.start < slotEnd && b.end > slot);
+    if (!hasConflict) {
+      return `${String(Math.floor(slot / 60)).padStart(2, '0')}:${String(slot % 60).padStart(2, '0')}`;
+    }
+  }
+  return '09:00'; // fallback
+}
+
 // ─── Confetti ─────────────────────────────────────────────────────────────────
 function ConfettiBurst() {
   const items = [
@@ -498,14 +534,30 @@ function TaskCard({ task, allTasks, onUpdate, onDelete }: {
 }
 
 // ─── Suggestion Card ──────────────────────────────────────────────────────────
-function SuggestionCard({ suggestion, onAdd }: { suggestion: Task & { why?: string }, onAdd: (s: Task) => void }) {
+function SuggestionCard({
+  suggestion, suggestedTime, onAdd
+}: {
+  suggestion: Task & { why?: string };
+  suggestedTime: string;
+  onAdd: (s: Task, scheduledTime: string) => void;
+}) {
   const [state, setState] = useState<'idle'|'adding'|'added'>('idle');
+  const [time, setTime] = useState(suggestedTime);
+
   function handleAdd() {
     if (state !== 'idle') return;
     setState('adding');
-    onAdd(suggestion);
+    onAdd(suggestion, time);
     setTimeout(() => setState('added'), 300);
   }
+
+  function formatTime(t: string) {
+    const [h, m] = t.split(':').map(Number);
+    const ampm = h >= 12 ? 'pm' : 'am';
+    const h12 = h % 12 || 12;
+    return `${h12}:${String(m).padStart(2,'0')}${ampm}`;
+  }
+
   return (
     <div className={`flex-shrink-0 w-72 rounded-2xl border p-4 flex flex-col gap-3 transition-all duration-300 ${
       state === 'added' ? 'border-white/20 bg-white/5 scale-[0.97] opacity-60' : 'border-[#1e1e1e] bg-[#141414]'
@@ -518,19 +570,33 @@ function SuggestionCard({ suggestion, onAdd }: { suggestion: Task & { why?: stri
         </span>
       </div>
       {suggestion.why && <p className="text-[#555] text-xs leading-relaxed">{suggestion.why}</p>}
+
       <div className="flex flex-wrap gap-1.5">
         <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1e1e1e] text-[#666]">{ENERGY_LABEL[suggestion.energy_level]}</span>
         {suggestion.estimated_minutes && (
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1e1e1e] text-[#666]">⏱ {formatMins(suggestion.estimated_minutes)}</span>
         )}
       </div>
+
+      {/* Time slot picker */}
+      {state === 'idle' && (
+        <div className="flex items-center gap-2 bg-[#1a1a1a] rounded-xl px-3 py-2">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2" strokeLinecap="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span className="text-[#555] text-xs flex-1">Schedule for</span>
+          <input type="time" value={time} onChange={e => setTime(e.target.value)}
+            className="bg-transparent text-white text-xs outline-none text-right w-20" />
+        </div>
+      )}
+
       <button onClick={handleAdd} disabled={state !== 'idle'}
         className={`w-full text-xs font-semibold rounded-xl py-2.5 transition-all duration-200 active:scale-[0.97] ${
           state === 'added' ? 'bg-white/10 text-white/60 cursor-default'
           : state === 'adding' ? 'bg-[#e0e0e0] text-[#0a0a0a]/60 cursor-default'
           : 'bg-white text-[#0a0a0a] hover:bg-[#e0e0e0]'
         }`}>
-        {state === 'added' ? '✓ Added' : state === 'adding' ? 'Adding...' : '+ Add to Tasks'}
+        {state === 'added' ? `✓ Added at ${formatTime(time)}` : state === 'adding' ? 'Adding...' : `+ Add at ${formatTime(time)}`}
       </button>
     </div>
   );
@@ -618,14 +684,18 @@ export default function TasksPage() {
     setLoadingSuggestions(false);
   }
 
-  async function addSuggestion(s: Task) {
+  async function addSuggestion(s: Task, scheduledTime: string) {
+    const date = localDateStr();
     const tempId = `temp-${Date.now()}`;
-    const optimistic = { ...s, id: tempId, status: 'todo' as const, source: 'suggested', due_date: s.due_date || localDateStr() };
+    const optimistic = {
+      ...s, id: tempId, status: 'todo' as const, source: 'suggested',
+      due_date: date, scheduled_time: scheduledTime,
+    };
     setTasks(prev => [optimistic, ...prev]);
     try {
       const res = await fetch('/api/tasks/create', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...s, source: 'suggested', localDate: localDateStr() }),
+        body: JSON.stringify({ ...s, source: 'suggested', localDate: date, scheduled_time: scheduledTime, due_date: date }),
       });
       if (res.ok) {
         const d = await res.json();
@@ -795,7 +865,17 @@ export default function TasksPage() {
             </div>
           ) : (
             <div className="flex gap-3 overflow-x-auto px-5 pb-1 scrollbar-hide">
-              {suggestions.map((s, i) => <SuggestionCard key={i} suggestion={s} onAdd={addSuggestion} />)}
+              {suggestions.map((s, i) => {
+                // Pre-calculate staggered slots so cards don't suggest the same time
+                const reserved: Array<{start: number; end: number}> = [];
+                for (let j = 0; j < i; j++) {
+                  const slot = findNextAvailableSlot(tasks, localDateStr(), suggestions[j].estimated_minutes || 30, reserved);
+                  const start = timeToMinutes(slot);
+                  reserved.push({ start, end: start + (suggestions[j].estimated_minutes || 30) });
+                }
+                const suggestedTime = findNextAvailableSlot(tasks, localDateStr(), s.estimated_minutes || 30, reserved);
+                return <SuggestionCard key={i} suggestion={s} suggestedTime={suggestedTime} onAdd={addSuggestion} />;
+              })}
             </div>
           )}
         </div>
