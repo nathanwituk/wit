@@ -61,10 +61,15 @@ export async function POST(req: NextRequest) {
     const estimated_minutes = body.estimated_minutes || await getEstimatedMinutes(title, category, energy_level);
     const ai_suggestions = await generateAISuggestions(title, description, category);
     const week_of = new Date();
-    week_of.setDate(week_of.getDate() - week_of.getDay()); // start of current week
+    week_of.setDate(week_of.getDate() - week_of.getDay());
+
+    // Default due_date to today (client timezone) or server date if not provided
+    const resolved_due_date = due_date || body.localDate || new Date().toISOString().slice(0, 10);
 
     const { data, error } = await supabase.from('tasks').insert({
-      title: title.trim(), description, category, due_date,
+      title: title.trim(), description, category,
+      due_date: resolved_due_date,
+      scheduled_time: body.scheduled_time || null,
       priority, energy_level, context_tag, friction_score,
       blocked_by, recurrence, notes, source,
       estimated_minutes, ai_suggestions,
