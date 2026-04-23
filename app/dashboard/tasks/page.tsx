@@ -692,19 +692,45 @@ export default function TasksPage() {
       due_date: date, scheduled_time: scheduledTime,
     };
     setTasks(prev => [optimistic, ...prev]);
+
+    // Sanitize — only send fields the DB accepts, with validated values
+    const VALID_PRIORITIES = ['urgent','high','medium','low'];
+    const VALID_ENERGY = ['deep_focus','light_work','quick_win'];
+    const VALID_CONTEXT = ['anywhere','computer','phone','gym','campus'];
+    const VALID_CATEGORIES = ['design','code','school','fitness','personal','content','admin'];
+
+    const payload = {
+      title: s.title?.trim() || 'Untitled',
+      description: s.description || '',
+      category: VALID_CATEGORIES.includes(s.category) ? s.category : 'personal',
+      priority: VALID_PRIORITIES.includes(s.priority) ? s.priority : 'medium',
+      energy_level: VALID_ENERGY.includes(s.energy_level) ? s.energy_level : 'light_work',
+      context_tag: VALID_CONTEXT.includes(s.context_tag) ? s.context_tag : 'anywhere',
+      friction_score: Math.min(5, Math.max(1, Number(s.friction_score) || 3)),
+      estimated_minutes: Number(s.estimated_minutes) > 0 ? Number(s.estimated_minutes) : 30,
+      blocked_by: [],
+      source: 'suggested',
+      due_date: date,
+      scheduled_time: scheduledTime,
+      localDate: date,
+    };
+
     try {
       const res = await fetch('/api/tasks/create', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...s, source: 'suggested', localDate: date, scheduled_time: scheduledTime, due_date: date }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         const d = await res.json();
         setTasks(prev => prev.map(t => t.id === tempId ? d.task : t));
         setSuggestions(prev => prev.filter(x => x.title !== s.title));
       } else {
+        const err = await res.json().catch(() => ({}));
+        console.error('Task create failed:', err);
         setTasks(prev => prev.filter(t => t.id !== tempId));
       }
-    } catch {
+    } catch (e) {
+      console.error('Task create error:', e);
       setTasks(prev => prev.filter(t => t.id !== tempId));
     }
   }
