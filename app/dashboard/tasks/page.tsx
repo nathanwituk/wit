@@ -752,20 +752,39 @@ function SuggestionCard({
 }
 
 // ─── Quick Create Modal ───────────────────────────────────────────────────────
+const QUICK_CATS = ['personal', 'design', 'code', 'school', 'fitness', 'content', 'admin'] as const;
+
 function QuickCreateModal({ time, date, onSave, onClose }: {
   time: string; date: string;
-  onSave: (title: string, time: string, date: string) => void;
+  onSave: (title: string, time: string, date: string, category: string) => void;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState('');
   const [selectedTime, setSelectedTime] = useState(time);
+  const [category, setCategory] = useState('personal');
+  const [chips, setChips] = useState<{ label: string; time: string; subtitle: string }[]>([]);
+  const [insight, setInsight] = useState<string | null>(null);
+  const [loadingChips, setLoadingChips] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { inputRef.current?.focus(); }, []);
+
+  useEffect(() => {
+    setChips([]); setInsight(null); setLoadingChips(true);
+    fetch('/api/patterns/analyze', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category }),
+    })
+      .then(r => r.json())
+      .then(d => { setChips(d.chips || []); setInsight(d.insight || null); })
+      .catch(() => {})
+      .finally(() => setLoadingChips(false));
+  }, [category]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 pb-8 bg-black/60 backdrop-blur-sm"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="w-full max-w-sm bg-[#141414] rounded-2xl border border-[#2a2a2a] p-5 flex flex-col gap-4">
+
         <div className="flex items-center justify-between">
           <p className="text-white text-sm font-semibold">New task</p>
           <button onClick={onClose} className="text-[#444] hover:text-[#888] transition-colors">
@@ -774,23 +793,72 @@ function QuickCreateModal({ time, date, onSave, onClose }: {
             </svg>
           </button>
         </div>
+
         <input ref={inputRef} value={title} onChange={e => setTitle(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && title.trim()) { onSave(title.trim(), selectedTime, date); onClose(); } if (e.key === 'Escape') onClose(); }}
+          onKeyDown={e => { if (e.key === 'Enter' && title.trim()) { onSave(title.trim(), selectedTime, date, category); onClose(); } if (e.key === 'Escape') onClose(); }}
           placeholder="What do you need to do?"
           className="bg-[#1e1e1e] text-white text-sm rounded-xl px-4 py-3 outline-none border border-[#2a2a2a] placeholder:text-[#444]" />
+
+        {/* Category picker */}
+        <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          {QUICK_CATS.map(cat => (
+            <button key={cat} onClick={() => setCategory(cat)}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                category === cat ? 'bg-white text-[#0a0a0a]' : 'bg-[#1e1e1e] text-[#666] border border-[#2a2a2a] hover:border-[#444]'
+              }`}>
+              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                style={{ backgroundColor: CATEGORY_COLOR[cat] || '#6b7280' }} />
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {/* Smart time chips from pattern engine */}
+        {loadingChips && (
+          <div className="flex gap-2">
+            {[1,2,3].map(i => <div key={i} className="h-12 w-20 rounded-xl bg-[#1e1e1e] animate-pulse" />)}
+          </div>
+        )}
+        {!loadingChips && chips.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <p className="text-[#333] text-[10px] uppercase tracking-wider font-semibold">Your patterns</p>
+            <div className="flex gap-2 flex-wrap">
+              {chips.map(chip => (
+                <button key={chip.time} onClick={() => setSelectedTime(chip.time)}
+                  className={`flex flex-col items-start px-3 py-2 rounded-xl border text-left transition-colors ${
+                    selectedTime === chip.time
+                      ? 'bg-white border-white text-[#0a0a0a]'
+                      : 'bg-[#1e1e1e] border-[#2a2a2a] text-white hover:border-[#444]'
+                  }`}>
+                  <span className="text-xs font-semibold leading-tight">{chip.label}</span>
+                  {chip.subtitle && (
+                    <span className={`text-[10px] leading-tight mt-0.5 ${selectedTime === chip.time ? 'text-[#666]' : 'text-[#555]'}`}>
+                      {chip.subtitle}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {insight && <p className="text-[#3a3a3a] text-[11px] leading-relaxed italic">{insight}</p>}
+          </div>
+        )}
+
+        {/* Time + date row */}
         <div className="flex items-center gap-2">
           <input type="time" value={selectedTime} onChange={e => setSelectedTime(e.target.value)}
             className="flex-1 bg-[#1e1e1e] text-white text-sm rounded-xl px-3 py-2.5 outline-none border border-[#2a2a2a]" />
           <p className="text-[#444] text-xs">{new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
         </div>
+
         <div className="flex gap-2">
-          <button onClick={() => { if (title.trim()) { onSave(title.trim(), selectedTime, date); onClose(); } }}
+          <button onClick={() => { if (title.trim()) { onSave(title.trim(), selectedTime, date, category); onClose(); } }}
             disabled={!title.trim()}
             className="flex-1 bg-white text-[#0a0a0a] text-sm font-semibold rounded-xl py-2.5 disabled:opacity-40 disabled:cursor-not-allowed">
             Add to Calendar
           </button>
           <button onClick={onClose} className="bg-[#1e1e1e] text-[#888] text-sm rounded-xl px-4 py-2.5">Cancel</button>
         </div>
+
       </div>
     </div>
   );
@@ -897,10 +965,10 @@ export default function TasksPage() {
     }
   }
 
-  async function quickAddTask(title: string, time: string, date: string) {
+  async function quickAddTask(title: string, time: string, date: string, category: string = 'personal') {
     const tempId = `temp-${Date.now()}`;
     const optimistic: Task = {
-      id: tempId, title, status: 'todo', priority: 'medium', category: 'personal',
+      id: tempId, title, status: 'todo', priority: 'medium', category,
       energy_level: 'light_work', context_tag: 'anywhere', friction_score: 3,
       blocked_by: [], due_date: date, scheduled_time: time,
     };
@@ -908,7 +976,7 @@ export default function TasksPage() {
     try {
       const res = await fetch('/api/tasks/create', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, due_date: date, scheduled_time: time, source: 'manual', localDate: date }),
+        body: JSON.stringify({ title, due_date: date, scheduled_time: time, category, source: 'manual', localDate: date }),
       });
       if (res.ok) {
         const d = await res.json();
