@@ -46,6 +46,17 @@ export async function POST(req: NextRequest) {
     });
 
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
+
+    // Fire-and-forget: extract memories from this chat exchange
+    const transcript = messages
+      .map((m: { role: string; content: string }) => `${m.role === 'user' ? 'Nathan' : 'Wit'}: ${m.content}`)
+      .join('\n') + `\nWit: ${text}`;
+    fetch(`${req.nextUrl.origin}/api/memories/extract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcript, source: 'chat' }),
+    }).catch(() => {});
+
     return NextResponse.json({ text });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

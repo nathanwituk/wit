@@ -173,6 +173,14 @@ function DayCalendarView({
   const nowOffset = (currentMins - START_HOUR * 60) * PX_PER_MIN;
   const totalHeight = (END_HOUR - START_HOUR) * 60 * PX_PER_MIN;
   const [confettiId, setConfettiId] = useState<string | null>(null);
+  const [showCompleted, setShowCompleted] = useState(true);
+  const [drag, setDrag] = useState<{ taskId: string; touchOffset: number; snappedMins: number } | null>(null);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragInitTouchY = useRef(0);
+  const dragRef = useRef<{ taskId: string; touchOffset: number; snappedMins: number } | null>(null);
+  dragRef.current = drag;
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
 
   // Filter tasks for this date
   const dayTasks = tasks.filter(t =>
@@ -182,10 +190,14 @@ function DayCalendarView({
     ? tasks.filter(t => t.status !== 'cancelled' && t.status !== 'done' && isOverdue(t.due_date))
     : [];
 
-  const scheduledTasks = dayTasks.filter(t => t.scheduled_time);
+  // Separate active vs done clearly
+  const scheduledActive = dayTasks.filter(t => t.scheduled_time && t.status !== 'done');
+  const scheduledDone   = dayTasks.filter(t => t.scheduled_time && t.status === 'done');
   const unscheduledActive = dayTasks.filter(t => !t.scheduled_time && t.status !== 'done');
-  const unscheduledDone = dayTasks.filter(t => !t.scheduled_time && t.status === 'done');
-  const allUnscheduled = [...overdueTasks.filter(t => !t.scheduled_time), ...unscheduledActive, ...unscheduledDone];
+  const allDone = [...scheduledDone, ...dayTasks.filter(t => !t.scheduled_time && t.status === 'done')];
+  const allUnscheduled = [...overdueTasks.filter(t => !t.scheduled_time), ...unscheduledActive];
+  // Keep scheduledTasks as all scheduled for grid rendering (active only in grid)
+  const scheduledTasks = scheduledActive;
 
   useEffect(() => {
     if (scrollRef.current && isSelectedToday) {
@@ -194,6 +206,42 @@ function DayCalendarView({
       scrollRef.current.scrollTop = (8 - START_HOUR) * 60 * PX_PER_MIN; // scroll to 8am
     }
   }, [selectedDate]);
+
+  // Document-level touch handlers while drag is active (passive: false to allow preventDefault)
+  const isDragging = drag !== null;
+  useEffect(() => {
+    if (!isDragging) return;
+    function onMove(e: TouchEvent) {
+      const d = dragRef.current;
+      if (!d) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const gridRect = scrollRef.current?.getBoundingClientRect();
+      const scrollTop = scrollRef.current?.scrollTop ?? 0;
+      if (!gridRect) return;
+      const taskContainerY = (touch.clientY - d.touchOffset) - gridRect.top + scrollTop;
+      const rawMins = taskContainerY / PX_PER_MIN + START_HOUR * 60;
+      const snapped = Math.min(Math.max(Math.round(rawMins / 30) * 30, START_HOUR * 60), (END_HOUR - 1) * 60);
+      if (snapped !== d.snappedMins) {
+        navigator.vibrate?.(8);
+        setDrag(prev => prev ? { ...prev, snappedMins: snapped } : null);
+      }
+    }
+    function onEnd() {
+      const d = dragRef.current;
+      if (!d) return;
+      const h = Math.floor(d.snappedMins / 60);
+      const m = d.snappedMins % 60;
+      onUpdateRef.current(d.taskId, { scheduled_time: `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}` });
+      setDrag(null);
+    }
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onEnd);
+    return () => {
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+    };
+  }, [isDragging]);
 
   function handleComplete(task: Task) {
     if (task.status === 'done') {
@@ -208,6 +256,24 @@ function DayCalendarView({
   function handleSlotTap(hour: number) {
     const time = `${String(hour).padStart(2,'0')}:00`;
     onQuickCreate(time);
+  }
+
+  function cancelHold() {
+    if (holdTimerRef.current !== null) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+  }
+
+  function handleTaskTouchStart(e: React.TouchEvent, task: Task, taskTop: number) {
+    dragInitTouchY.current = e.touches[0].clientY;
+    holdTimerRef.current = setTimeout(() => {
+      holdTimerRef.current = null;
+      navigator.vibrate?.(25);
+      const gridRect = scrollRef.current?.getBoundingClientRect();
+      const scrollTop = scrollRef.current?.scrollTop ?? 0;
+      if (!gridRect) return;
+      const taskScreenY = gridRect.top + taskTop - scrollTop;
+      const touchOffset = dragInitTouchY.current - taskScreenY;
+      setDrag({ taskId: task.id, touchOffset, snappedMins: timeToMinutes(task.scheduled_time!) });
+    }, 450);
   }
 
   const hours = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => i + START_HOUR);
@@ -296,12 +362,19 @@ function DayCalendarView({
 
             return (
               <div key={task.id}
-                className={`absolute left-14 right-5 rounded-xl overflow-visible z-10 transition-opacity ${isDone ? 'opacity-40' : ''}`}
+                className={`absolute left-14 right-5 rounded-xl overflow-visible z-10 transition-opacity select-none ${isDone ? 'opacity-40' : drag?.taskId === task.id ? 'opacity-25' : ''}`}
                 style={{
                   top, height,
                   backgroundColor: isDone ? '#1a1a1a' : `${color}20`,
                   borderLeft: `3px solid ${isDone ? '#333' : color}`,
-                }}>
+                }}
+                onTouchStart={(e) => !isDone && handleTaskTouchStart(e, task, top)}
+                onTouchMove={(e) => {
+                  if (holdTimerRef.current !== null && Math.abs(e.touches[0].clientY - dragInitTouchY.current) > 8) cancelHold();
+                }}
+                onTouchEnd={cancelHold}
+                onContextMenu={(e) => e.preventDefault()}
+              >
                 <div className="px-2.5 py-1.5 h-full flex items-center gap-2">
                   {/* Checkbox */}
                   <div className="relative flex-shrink-0">
@@ -330,8 +403,40 @@ function DayCalendarView({
             );
           })}
 
+          {/* Drag ghost block */}
+          {drag && (() => {
+            const dragTask = scheduledTasks.find(t => t.id === drag.taskId);
+            if (!dragTask) return null;
+            const ghostTop = (drag.snappedMins - START_HOUR * 60) * PX_PER_MIN;
+            const ghostHeight = Math.max((dragTask.estimated_minutes || 30) * PX_PER_MIN, 32);
+            const ghostColor = CATEGORY_COLOR[dragTask.category] || '#6b7280';
+            const dh = drag.snappedMins / 60;
+            const displayH = Math.floor(dh) > 12 ? Math.floor(dh) - 12 : Math.floor(dh) === 0 ? 12 : Math.floor(dh);
+            const displayM = drag.snappedMins % 60;
+            const period = Math.floor(dh) >= 12 ? 'PM' : 'AM';
+            const timeLabel = `${displayH}:${String(displayM).padStart(2,'0')} ${period}`;
+            return (
+              <div key="drag-ghost"
+                className="absolute left-14 right-5 rounded-xl z-30 pointer-events-none"
+                style={{
+                  top: ghostTop, height: ghostHeight,
+                  backgroundColor: `${ghostColor}35`,
+                  borderLeft: `3px solid ${ghostColor}`,
+                  boxShadow: `0 0 20px ${ghostColor}30`,
+                  transition: 'top 0.06s ease-out',
+                }}>
+                <div className="px-2.5 py-1.5 h-full flex items-center gap-2">
+                  <div className="flex flex-col justify-center flex-1 min-w-0">
+                    <p className="text-xs font-semibold leading-tight truncate text-white">{dragTask.title}</p>
+                    <p className="text-white/60 text-[10px] mt-0.5 font-medium">{timeLabel}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Empty state */}
-          {scheduledTasks.length === 0 && allUnscheduled.length === 0 && (
+          {scheduledTasks.length === 0 && allUnscheduled.length === 0 && allDone.length === 0 && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none">
               <p className="text-[#2a2a2a] text-sm">No tasks for this day</p>
               <p className="text-[#222] text-xs">Tap any time slot to add one</p>
@@ -339,6 +444,50 @@ function DayCalendarView({
           )}
         </div>
       </div>
+
+      {/* ── Completed section — always rendered, collapsible ── */}
+      {allDone.length > 0 && (
+        <div className="flex-shrink-0 border-t border-[#181818]">
+          <button
+            onClick={() => setShowCompleted(p => !p)}
+            className="w-full flex items-center justify-between px-5 py-2.5 hover:bg-white/[0.02] transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2.5" strokeLinecap="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              <span className="text-[10px] uppercase tracking-wider text-[#444] font-semibold">
+                Completed ({allDone.length})
+              </span>
+            </div>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#333" strokeWidth="2" strokeLinecap="round">
+              <polyline points={showCompleted ? "18 15 12 9 6 15" : "6 9 12 15 18 9"}/>
+            </svg>
+          </button>
+          {showCompleted && (
+            <div className="px-5 pb-3 flex flex-col gap-1.5">
+              {allDone.map(t => (
+                <div key={t.id} className="flex items-center gap-2.5 rounded-xl px-3 py-2 bg-[#0e0e0e] border border-[#161616]">
+                  <button
+                    onClick={() => onUpdate(t.id, { status: 'todo' })}
+                    className="w-4 h-4 rounded-full bg-[#1e1e1e] border-2 border-[#2a2a2a] flex items-center justify-center flex-shrink-0 hover:border-white transition-colors"
+                  >
+                    <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#444" strokeWidth="3" strokeLinecap="round">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </button>
+                  <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: CATEGORY_COLOR[t.category] || '#333' }} />
+                  <span className="text-xs flex-1 truncate line-through text-[#3a3a3a]">{t.title}</span>
+                  {t.scheduled_time && (
+                    <span className="text-[10px] text-[#2a2a2a] flex-shrink-0">{t.scheduled_time}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
     </div>
   );
 }
@@ -655,7 +804,7 @@ export default function TasksPage() {
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
   const [selectedDate, setSelectedDate] = useState(localDateStr());
   const [view, setView] = useState<'calendar'|'list'>('calendar');
-  const [showDone, setShowDone] = useState(false);
+  const [showDone, setShowDone] = useState(true);
   const [quickCreate, setQuickCreate] = useState<{ time: string } | null>(null);
 
   useEffect(() => {
@@ -663,13 +812,26 @@ export default function TasksPage() {
     fetchSuggestions();
   }, []);
 
-  async function fetchTasks() {
-    setLoadingTasks(true);
+  async function fetchTasks(attempt = 0) {
+    if (attempt === 0) setLoadingTasks(true);
     try {
       const res = await fetch('/api/tasks/list');
-      if (res.ok) { const d = await res.json(); setTasks(d.tasks || []); }
-    } catch {}
-    setLoadingTasks(false);
+      if (res.ok) {
+        const d = await res.json();
+        setTasks(d.tasks || []);
+        setLoadingTasks(false);
+      } else if (attempt < 2) {
+        setTimeout(() => fetchTasks(attempt + 1), 1500);
+      } else {
+        setLoadingTasks(false);
+      }
+    } catch {
+      if (attempt < 2) {
+        setTimeout(() => fetchTasks(attempt + 1), 1500);
+      } else {
+        setLoadingTasks(false);
+      }
+    }
   }
 
   async function fetchSuggestions() {
@@ -927,13 +1089,24 @@ export default function TasksPage() {
           <Section label="Upcoming" items={grouped.upcoming} color="#6b7280" />
           <Section label="Someday" items={grouped.someday} color="#374151" />
           {grouped.done.length > 0 && (
-            <div>
+            <div className="border-t border-[#181818] pt-4">
               <button onClick={() => setShowDone(p => !p)}
-                className="text-xs text-[#333] hover:text-[#555] transition-colors uppercase tracking-wider font-semibold">
-                {showDone ? '▼' : '▶'} Completed ({grouped.done.length})
+                className="flex items-center gap-2 mb-3 hover:opacity-80 transition-opacity">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2.5" strokeLinecap="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span className="text-xs text-[#444] uppercase tracking-wider font-semibold">
+                  Completed
+                </span>
+                <span className="text-[10px] bg-[#1e1e1e] text-[#555] px-2 py-0.5 rounded-full">
+                  {grouped.done.length}
+                </span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#333" strokeWidth="2" strokeLinecap="round">
+                  <polyline points={showDone ? "18 15 12 9 6 15" : "6 9 12 15 18 9"}/>
+                </svg>
               </button>
               {showDone && (
-                <div className="flex flex-col gap-2 mt-2">
+                <div className="flex flex-col gap-2">
                   {grouped.done.map(t => <TaskCard key={t.id} task={t} allTasks={tasks} onUpdate={updateTask} onDelete={deleteTask} />)}
                 </div>
               )}
