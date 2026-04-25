@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAdminSupabaseClient } from '@/lib/supabase-server';
+import { logTaskEvent } from '@/lib/task-events';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -77,6 +78,13 @@ export async function POST(req: NextRequest) {
     }).select().single();
 
     if (error) throw error;
+
+    // Fire-and-forget event logging
+    logTaskEvent({ task_id: data.id, event_type: 'created', category, context_tag, energy_level, estimated_minutes: data.estimated_minutes });
+    if (data.scheduled_time) {
+      logTaskEvent({ task_id: data.id, event_type: 'scheduled', category, context_tag, energy_level, time_of_day: data.scheduled_time, estimated_minutes: data.estimated_minutes });
+    }
+
     return NextResponse.json({ task: data });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
