@@ -371,20 +371,21 @@ export default function Dashboard() {
       });
 
       const data = await res.json();
-      let content = data.text || data.error || 'No response — try again.';
       const actions: ScheduleAction[] = (data.actions || []).map((a: ScheduleAction) => ({
         ...a,
         status: 'pending' as const,
       }));
 
       // plan_full_day is handled server-side — tasks already in DB
+      let content = data.text || '';
       if (data.tasksCreated > 0) {
-        // Signal the Tasks page to re-fetch
         try { localStorage.setItem('wit_tasks_updated', Date.now().toString()); } catch {}
-        // If Claude didn't include a text response, add a confirmation
         if (!content.trim()) {
           content = `Done — ${data.tasksCreated} task${data.tasksCreated === 1 ? '' : 's'} added to your calendar.`;
         }
+      }
+      if (!content.trim()) {
+        content = data.error || 'No response — try again.';
       }
 
       // Auto-execute update_task_schedule — low-risk, apply immediately
