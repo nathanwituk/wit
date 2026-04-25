@@ -158,13 +158,14 @@ function ConfettiBurst() {
 
 // ─── Day Calendar View ────────────────────────────────────────────────────────
 function DayCalendarView({
-  tasks, selectedDate, onUpdate, onDelete, onQuickCreate
+  tasks, selectedDate, onUpdate, onDelete, onQuickCreate, onEdit
 }: {
   tasks: Task[];
   selectedDate: string;
   onUpdate: (id: string, updates: Partial<Task>) => void;
   onDelete: (id: string) => void;
   onQuickCreate: (time: string) => void;
+  onEdit: (task: Task) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const now = new Date();
@@ -398,6 +399,16 @@ function DayCalendarView({
                       </p>
                     )}
                   </div>
+                  {/* Edit button */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onEdit(task); }}
+                    className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-md text-white/20 hover:text-white/70 hover:bg-white/10 transition-colors"
+                  >
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                  </button>
                 </div>
               </div>
             );
@@ -751,6 +762,79 @@ function SuggestionCard({
   );
 }
 
+// ─── Edit Task Modal ──────────────────────────────────────────────────────────
+function EditTaskModal({ task, onSave, onDelete, onClose }: {
+  task: Task;
+  onSave: (id: string, updates: Partial<Task>) => void;
+  onDelete: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [data, setData] = useState(task);
+
+  function save() { onSave(task.id, data); onClose(); }
+  function del() { onDelete(task.id); onClose(); }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 pb-8 bg-black/60 backdrop-blur-sm"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-sm bg-[#141414] rounded-2xl border border-[#2a2a2a] p-5 flex flex-col gap-4 max-h-[85vh] overflow-y-auto">
+
+        <div className="flex items-center justify-between">
+          <p className="text-white text-sm font-semibold">Edit task</p>
+          <button onClick={onClose} className="text-[#444] hover:text-[#888] transition-colors">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <input value={data.title} onChange={e => setData(p => ({ ...p, title: e.target.value }))}
+          placeholder="Task title"
+          className="bg-[#1e1e1e] text-white text-sm rounded-xl px-4 py-3 outline-none border border-[#2a2a2a] placeholder:text-[#444]" />
+
+        <textarea value={data.description || ''} onChange={e => setData(p => ({ ...p, description: e.target.value }))}
+          rows={2} placeholder="Description (optional)"
+          className="bg-[#1e1e1e] text-white text-sm rounded-xl px-4 py-3 outline-none border border-[#2a2a2a] placeholder:text-[#444] resize-none" />
+
+        <div className="grid grid-cols-2 gap-2">
+          <input type="time" value={data.scheduled_time || ''} onChange={e => setData(p => ({ ...p, scheduled_time: e.target.value || undefined }))}
+            className="bg-[#1e1e1e] text-white text-sm rounded-xl px-3 py-2.5 outline-none border border-[#2a2a2a]" />
+          <input type="number" value={data.estimated_minutes || ''} onChange={e => setData(p => ({ ...p, estimated_minutes: parseInt(e.target.value) || undefined }))}
+            placeholder="Est. mins"
+            className="bg-[#1e1e1e] text-white text-sm rounded-xl px-3 py-2.5 outline-none border border-[#2a2a2a] placeholder:text-[#444]" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <select value={data.category} onChange={e => setData(p => ({ ...p, category: e.target.value }))}
+            className="bg-[#1e1e1e] text-white text-sm rounded-xl px-3 py-2.5 outline-none border border-[#2a2a2a]">
+            {['design','code','school','fitness','personal','content','admin'].map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select value={data.priority} onChange={e => setData(p => ({ ...p, priority: e.target.value as Task['priority'] }))}
+            className="bg-[#1e1e1e] text-white text-sm rounded-xl px-3 py-2.5 outline-none border border-[#2a2a2a]">
+            {['urgent','high','medium','low'].map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+
+        <select value={data.energy_level} onChange={e => setData(p => ({ ...p, energy_level: e.target.value as Task['energy_level'] }))}
+          className="bg-[#1e1e1e] text-white text-sm rounded-xl px-3 py-2.5 outline-none border border-[#2a2a2a]">
+          {['deep_focus','light_work','quick_win'].map(e => <option key={e} value={e}>{e.replace('_',' ')}</option>)}
+        </select>
+
+        <div className="flex gap-2">
+          <button onClick={save} disabled={!data.title.trim()}
+            className="flex-1 bg-white text-[#0a0a0a] text-sm font-semibold rounded-xl py-2.5 disabled:opacity-40">
+            Save
+          </button>
+          <button onClick={onClose} className="bg-[#1e1e1e] text-[#888] text-sm rounded-xl px-4 py-2.5">Cancel</button>
+        </div>
+        <button onClick={del} className="text-red-900 text-xs hover:text-red-500 transition-colors text-center">
+          Delete task
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Quick Create Modal ───────────────────────────────────────────────────────
 const QUICK_CATS = ['personal', 'design', 'code', 'school', 'fitness', 'content', 'admin'] as const;
 
@@ -874,10 +958,28 @@ export default function TasksPage() {
   const [view, setView] = useState<'calendar'|'list'>('calendar');
   const [showDone, setShowDone] = useState(true);
   const [quickCreate, setQuickCreate] = useState<{ time: string } | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   useEffect(() => {
     fetchTasks();
     fetchSuggestions();
+
+    // Re-fetch tasks when the tab becomes visible (user switches from Chat → Tasks)
+    function onVisible() {
+      if (!document.hidden) fetchTasks();
+    }
+    // Also re-fetch when Chat page signals tasks were created
+    function onStorage(e: StorageEvent) {
+      if (e.key === 'wit_tasks_updated') fetchTasks();
+    }
+
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('storage', onStorage);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchTasks(attempt = 0) {
@@ -903,13 +1005,32 @@ export default function TasksPage() {
   }
 
   async function fetchSuggestions() {
-    setLoadingSuggestions(true);
+    const cacheKey = `wit_suggestions_${localDateStr()}`;
+
+    // Show cached suggestions instantly, then refresh in background
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { suggestions: cachedSuggestions } = JSON.parse(cached);
+        if (cachedSuggestions?.length > 0) {
+          setSuggestions(cachedSuggestions);
+          setLoadingSuggestions(false);
+        }
+      }
+    } catch {}
+
+    // Always fetch fresh in background (silently if we already showed cache)
     try {
       const tz = getUserTimezone();
       const date = localDateStr();
       const time = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
       const res = await fetch(`/api/tasks/suggest?tz=${encodeURIComponent(tz)}&date=${date}&time=${encodeURIComponent(time)}`);
-      if (res.ok) { const d = await res.json(); setSuggestions(d.suggestions || []); }
+      if (res.ok) {
+        const d = await res.json();
+        const fresh = d.suggestions || [];
+        setSuggestions(fresh);
+        try { localStorage.setItem(cacheKey, JSON.stringify({ suggestions: fresh })); } catch {}
+      }
     } catch {}
     setLoadingSuggestions(false);
   }
@@ -1149,6 +1270,7 @@ export default function TasksPage() {
           onUpdate={updateTask}
           onDelete={deleteTask}
           onQuickCreate={(time) => setQuickCreate({ time })}
+          onEdit={(task) => setEditingTask(task)}
         />
       ) : (
         <div className="px-5 flex flex-col gap-6 pb-8 overflow-y-auto flex-1">
@@ -1196,6 +1318,16 @@ export default function TasksPage() {
           date={selectedDate}
           onSave={quickAddTask}
           onClose={() => setQuickCreate(null)}
+        />
+      )}
+
+      {/* Edit task modal */}
+      {editingTask && (
+        <EditTaskModal
+          task={editingTask}
+          onSave={updateTask}
+          onDelete={deleteTask}
+          onClose={() => setEditingTask(null)}
         />
       )}
     </div>
