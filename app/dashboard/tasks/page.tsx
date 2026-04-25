@@ -352,20 +352,56 @@ function DayCalendarView({
             </div>
           )}
 
-          {/* Scheduled task blocks */}
-          {scheduledTasks.map(task => {
-            const startMins = timeToMinutes(task.scheduled_time!) - START_HOUR * 60;
-            const duration = task.estimated_minutes || 30;
-            const top = startMins * PX_PER_MIN;
-            const height = Math.max(duration * PX_PER_MIN, 32);
+          {/* Scheduled task blocks — overlap-aware layout */}
+          {(() => {
+            // Group tasks into overlap clusters, assign columns
+            type Block = { task: Task; top: number; height: number; startMins: number; endMins: number };
+            const blocks: Block[] = scheduledTasks.map(task => {
+              const startMins = timeToMinutes(task.scheduled_time!);
+              const duration = task.estimated_minutes || 30;
+              const top = (startMins - START_HOUR * 60) * PX_PER_MIN;
+              const height = Math.max(duration * PX_PER_MIN, 32);
+              return { task, top, height, startMins, endMins: startMins + duration };
+            });
+
+            // Assign column index to each block
+            const cols: number[] = new Array(blocks.length).fill(0);
+            const colEnds: number[] = []; // track end time of each column
+            for (let i = 0; i < blocks.length; i++) {
+              let col = 0;
+              while (colEnds[col] !== undefined && colEnds[col] > blocks[i].startMins) col++;
+              cols[i] = col;
+              colEnds[col] = blocks[i].endMins;
+            }
+            // How many columns does each block's cluster span?
+            const totalCols: number[] = new Array(blocks.length).fill(1);
+            for (let i = 0; i < blocks.length; i++) {
+              for (let j = 0; j < blocks.length; j++) {
+                if (i !== j && blocks[i].startMins < blocks[j].endMins && blocks[i].endMins > blocks[j].startMins) {
+                  totalCols[i] = Math.max(totalCols[i], cols[j] + 1);
+                }
+              }
+            }
+
+            return blocks.map(({ task, top, height }, i) => {
             const color = CATEGORY_COLOR[task.category] || '#6b7280';
             const isDone = task.status === 'done';
+            const col = cols[i];
+            const total = totalCols[i];
+            // left offset: label col is 56px, right margin 20px, split remaining
+            const trackLeft = 56;
+            const trackRight = 20;
+            const trackWidth = `calc(100% - ${trackLeft + trackRight}px)`;
+            const colWidth = total > 1 ? `calc((100% - ${trackLeft + trackRight}px) / ${total} - 2px)` : trackWidth;
+            const colLeft = total > 1 ? `calc(${trackLeft}px + (100% - ${trackLeft + trackRight}px) / ${total} * ${col} + ${col * 2}px)` : `${trackLeft}px`;
 
             return (
               <div key={task.id}
-                className={`absolute left-14 right-5 rounded-xl overflow-visible z-10 transition-opacity select-none ${isDone ? 'opacity-40' : drag?.taskId === task.id ? 'opacity-25' : ''}`}
+                className={`absolute rounded-xl overflow-visible z-10 transition-opacity select-none ${isDone ? 'opacity-40' : drag?.taskId === task.id ? 'opacity-25' : ''}`}
                 style={{
                   top, height,
+                  left: colLeft,
+                  width: colWidth,
                   backgroundColor: isDone ? '#1a1a1a' : `${color}20`,
                   borderLeft: `3px solid ${isDone ? '#333' : color}`,
                 }}
@@ -412,7 +448,8 @@ function DayCalendarView({
                 </div>
               </div>
             );
-          })}
+            });
+          })()}
 
           {/* Drag ghost block */}
           {drag && (() => {

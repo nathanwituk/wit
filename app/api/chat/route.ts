@@ -195,7 +195,6 @@ export async function POST(req: NextRequest) {
       if (block.type === 'text') text += block.text;
       if (block.type === 'tool_use') {
         if (block.name === 'plan_full_day') {
-          // Handle plan_full_day server-side — create tasks directly in DB
           const planInput = block.input as {
             date?: string;
             summary?: string;
@@ -207,30 +206,90 @@ export async function POST(req: NextRequest) {
           const planDate = planInput.date || todaysDate;
           const supabase = createAdminSupabaseClient();
 
-          const results = await Promise.allSettled(
-            (planInput.plan || []).map(item => {
-              if (item.task_id) {
-                return supabase.from('tasks')
-                  .update({ scheduled_time: item.time, due_date: planDate })
-                  .eq('id', item.task_id);
-              }
-              return supabase.from('tasks').insert({
-                title: item.title,
-                category: item.category || 'personal',
-                due_date: planDate,
-                scheduled_time: item.time,
-                estimated_minutes: item.duration_minutes || 30,
-                priority: item.priority || 'medium',
-                energy_level: item.energy_level || 'light_work',
-                status: 'todo',
-                context_tag: 'anywhere',
-                friction_score: 3,
-                blocked_by: [],
-                source: 'chat_plan',
-              });
-            })
-          );
-          tasksCreated = results.filter(r => r.status === 'fulfilled').length;
+          // Fetch existing tasks for this day to check duplicates + conflicts
+          const { data: existingTasks } = await supabase
+            .from('tasks')
+            .select('id, title, scheduled_time, estimated_minutes')
+            .eq('due_date', planDate)
+            .neq('status', 'cancelled');
+
+          const existing = existingTasks || [];
+
+          function tMins(t: string): number {
+            const [h, m] = t.split(':').map(Number);
+            return h * 60 + m;
+          }
+          function minsToT(m: number): string {
+            return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+          }
+          function titleSimilar(a: string, b: string): boolean {
+            a = a.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+            b = b.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+            if (a === b || a.includes(b) || b.includes(a)) return true;
+            const aW = new Set(a.split(' ').filter(w => w.length > 3));
+            const overlap = b.split(' ').filter(w => w.length > 3 && aW.has(w)).length;
+            return overlap >= 2;
+          }
+          function findFreeSlot(
+            wantedMins: number, duration: number,
+            occupied: Array<{ start: number; end: number }>
+          ): number {
+            let slot = wantedMins;
+            for (let i = 0; i < 48; i++) {
+              const conflict = occupied.find(o => o.start < slot + duration && o.end > slot);
+              if (!conflict) return slot;
+              slot = conflict.end;
+            }
+            return wantedMins;
+          }
+
+          // Seed occupied slots from existing tasks
+          const occupied: Array<{ start: number; end: number }> = existing
+            .filter(t => t.scheduled_time)
+            .map(t => ({
+              start: tMins(t.scheduled_time),
+              end: tMins(t.scheduled_time) + (t.estimated_minutes || 30),
+            }));
+
+          let created = 0;
+          for (const item of planInput.plan || []) {
+            // Reschedule existing task — just update time, no duplicate risk
+            if (item.task_id) {
+              const duration = item.duration_minutes || 30;
+              const freeMins = findFreeSlot(tMins(item.time), duration, occupied);
+              occupied.push({ start: freeMins, end: freeMins + duration });
+              const res = await supabase.from('tasks')
+                .update({ scheduled_time: minsToT(freeMins), due_date: planDate })
+                .eq('id', item.task_id);
+              if (!res.error) created++;
+              continue;
+            }
+
+            // Skip if a similar task already exists for this day
+            if (existing.some(t => titleSimilar(t.title, item.title))) continue;
+
+            // Find a free time slot
+            const duration = item.duration_minutes || 30;
+            const freeMins = findFreeSlot(tMins(item.time), duration, occupied);
+            occupied.push({ start: freeMins, end: freeMins + duration });
+
+            const res = await supabase.from('tasks').insert({
+              title: item.title,
+              category: item.category || 'personal',
+              due_date: planDate,
+              scheduled_time: minsToT(freeMins),
+              estimated_minutes: duration,
+              priority: item.priority || 'medium',
+              energy_level: item.energy_level || 'light_work',
+              status: 'todo',
+              context_tag: 'anywhere',
+              friction_score: 3,
+              blocked_by: [],
+              source: 'chat_plan',
+            });
+            if (!res.error) created++;
+          }
+          tasksCreated = created;
         } else {
           // propose_task and update_task_schedule handled client-side
           actions.push({ type: block.name, input: block.input as Record<string, unknown> });
