@@ -9,7 +9,7 @@ interface Message {
 }
 
 interface ScheduleAction {
-  type: 'propose_task' | 'update_task_schedule' | 'plan_full_day';
+  type: 'propose_task' | 'update_task_schedule' | 'plan_full_day' | 'delete_task';
   input: Record<string, unknown>;
   status?: 'pending' | 'confirmed' | 'dismissed';
 }
@@ -376,12 +376,14 @@ export default function Dashboard() {
         status: 'pending' as const,
       }));
 
-      // plan_full_day is handled server-side — tasks already in DB
+      // plan_full_day and delete_task are handled server-side
       let content = data.text || '';
-      if (data.tasksCreated > 0) {
+      if (data.tasksCreated > 0 || data.tasksDeleted > 0) {
         try { localStorage.setItem('wit_tasks_updated', Date.now().toString()); } catch {}
         if (!content.trim()) {
-          content = `Done — ${data.tasksCreated} task${data.tasksCreated === 1 ? '' : 's'} added to your calendar.`;
+          if (data.tasksCreated > 0) {
+            content = `Done — ${data.tasksCreated} task${data.tasksCreated === 1 ? '' : 's'} added to your calendar.`;
+          }
         }
       }
       if (!content.trim()) {

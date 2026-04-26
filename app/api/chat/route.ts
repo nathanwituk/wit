@@ -88,6 +88,19 @@ const SCHEDULE_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'delete_task',
+    description:
+      "Permanently delete a task. Use when Nathan says 'delete', 'remove', 'get rid of', or 'cancel' a specific task. Use the task ID from today's schedule context.",
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        task_id: { type: 'string', description: 'ID of the task to delete' },
+        title: { type: 'string', description: 'Task title (for confirmation message)' },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
     name: 'update_task_schedule',
     description:
       "Update an existing task — mark it done, change its time, or reschedule it. Use task IDs from today's schedule shown in context.",
@@ -143,6 +156,7 @@ const SCHEDULE_TOOLS: Anthropic.Tool[] = [
 const PLAN_DAY_KEYWORDS = /\bplan\b|\bschedule (my|the|today|tomorrow|this)\b|what (should|can) (i|we) (do|work on|focus on|tackle)|my (day|schedule|agenda|tasks)|just woke|i.?m awake|good morning|lay out (my|the)|organize (my|the) day/i;
 const ACTIVITY_KEYWORDS = /i.?m (at|in|doing|working|going|starting|about to)|just (started|got to|arrived|began|got back)|right now i/i;
 const DONE_KEYWORDS = /just (finished|completed|done|got back|wrapped|left|returned)|i.?m (done|finished|back|home|out of)|finished (my|the)|done with|wrapped up/i;
+const DELETE_KEYWORDS = /\b(delete|remove|get rid of|drop|cancel|clear)\b.{0,40}\b(task|that|the|my|it)\b|\b(delete|remove|get rid of)\b/i;
 
 export async function POST(req: NextRequest) {
   try {
@@ -172,6 +186,8 @@ export async function POST(req: NextRequest) {
 
     if (PLAN_DAY_KEYWORDS.test(lastUserMsg)) {
       toolChoice = { type: 'tool', name: 'plan_full_day' };
+    } else if (DELETE_KEYWORDS.test(lastUserMsg)) {
+      toolChoice = { type: 'tool', name: 'delete_task' };
     } else if (DONE_KEYWORDS.test(lastUserMsg)) {
       toolChoice = { type: 'tool', name: 'update_task_schedule' };
     } else if (ACTIVITY_KEYWORDS.test(lastUserMsg)) {
@@ -189,12 +205,23 @@ export async function POST(req: NextRequest) {
 
     let text = '';
     let tasksCreated = 0;
+    let tasksDeleted = 0;
     const actions: Array<{ type: string; input: Record<string, unknown> }> = [];
 
     for (const block of response.content) {
       if (block.type === 'text') text += block.text;
       if (block.type === 'tool_use') {
-        if (block.name === 'plan_full_day') {
+        if (block.name === 'delete_task') {
+          const input = block.input as { task_id: string; title?: string };
+          const supabase = createAdminSupabaseClient();
+          const { error } = await supabase.from('tasks').delete().eq('id', input.task_id);
+          if (!error) {
+            tasksDeleted++;
+            if (!text.trim()) {
+              text = `Done — "${input.title || 'Task'}" deleted.`;
+            }
+          }
+        } else if (block.name === 'plan_full_day') {
           const planInput = block.input as {
             date?: string;
             summary?: string;
@@ -309,7 +336,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({ transcript, source: 'chat' }),
     }).catch(() => {});
 
-    return NextResponse.json({ text, actions, tasksCreated });
+    return NextResponse.json({ text, actions, tasksCreated, tasksDeleted });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(err);
