@@ -192,7 +192,7 @@ function EmailCard({
 }
 
 // ─── Inbox tab ────────────────────────────────────────────────────────────────
-function InboxTab({ gmailEmail }: { gmailEmail: string | null }) {
+function InboxTab({ gmailEmails }: { gmailEmails: string[] }) {
   const [emails, setEmails] = useState<EmailSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [taskAdded, setTaskAdded] = useState<string | null>(null);
@@ -209,8 +209,8 @@ function InboxTab({ gmailEmail }: { gmailEmail: string | null }) {
   }, []);
 
   useEffect(() => {
-    if (gmailEmail) fetchEmails();
-  }, [gmailEmail, fetchEmails]);
+    if (gmailEmails.length > 0) fetchEmails();
+  }, [gmailEmails.length, fetchEmails]);
 
   async function handleDismiss(id: string, alsoInGmail: boolean) {
     setEmails(prev => prev.filter(e => e.id !== id));
@@ -237,18 +237,39 @@ function InboxTab({ gmailEmail }: { gmailEmail: string | null }) {
     setTimeout(() => setTaskAdded(null), 2500);
   }
 
-  if (!gmailEmail) {
+  if (gmailEmails.length === 0) {
     return <ConnectPrompt onConnect={() => { window.location.href = '/api/actions/auth/gmail'; }} />;
   }
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      {/* Connected header */}
-      <div className="px-5 py-3 border-b border-[#141414] flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-          <p className="text-[#555] text-xs">{gmailEmail}</p>
+      {/* Connected accounts header */}
+      <div className="px-5 py-3 border-b border-[#141414] flex-shrink-0">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <p className="text-[#444] text-[10px] uppercase tracking-wider font-medium">Connected</p>
+          </div>
+          <button
+            onClick={() => { window.location.href = '/api/actions/auth/gmail'; }}
+            className="flex items-center gap-1.5 text-[11px] text-[#444] hover:text-white bg-[#141414] hover:bg-[#1e1e1e] px-2.5 py-1.5 rounded-lg transition-all"
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add account
+          </button>
         </div>
+        <div className="flex flex-wrap gap-1.5">
+          {gmailEmails.map(email => (
+            <span key={email} className="text-[10px] text-[#555] bg-[#141414] px-2.5 py-1 rounded-lg truncate max-w-[200px]">{email}</span>
+          ))}
+        </div>
+      </div>
+
+      {/* Refresh + actions row */}
+      <div className="px-5 py-2 border-b border-[#0e0e0e] flex items-center justify-end flex-shrink-0">
+        <div>
         <button
           onClick={fetchEmails}
           className="text-[#333] hover:text-[#888] transition-colors"
@@ -258,6 +279,7 @@ function InboxTab({ gmailEmail }: { gmailEmail: string | null }) {
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
           </svg>
         </button>
+        </div>
       </div>
 
       {/* Task added toast */}
@@ -420,27 +442,24 @@ function ContentTab() {
 // ─── Inner page (uses searchParams) ──────────────────────────────────────────
 function ActionsInner() {
   const [tab, setTab] = useState<Tab>('inbox');
-  const [gmailEmail, setGmailEmail] = useState<string | null>(null);
+  const [gmailEmails, setGmailEmails] = useState<string[]>([]);
   const searchParams = useSearchParams();
 
-  useEffect(() => {
+  const loadStatus = useCallback(() => {
     fetch('/api/actions/status')
       .then(r => r.json())
       .then(data => {
-        if (data.connected?.gmail) setGmailEmail(data.connected.gmail);
+        if (data.connected?.gmail) setGmailEmails(data.connected.gmail);
       })
       .catch(() => {});
   }, []);
 
+  useEffect(() => { loadStatus(); }, [loadStatus]);
+
   // Handle redirect back from OAuth
   useEffect(() => {
-    if (searchParams.get('connected') === 'gmail') {
-      fetch('/api/actions/status')
-        .then(r => r.json())
-        .then(data => { if (data.connected?.gmail) setGmailEmail(data.connected.gmail); })
-        .catch(() => {});
-    }
-  }, [searchParams]);
+    if (searchParams.get('connected') === 'gmail') loadStatus();
+  }, [searchParams, loadStatus]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -464,7 +483,7 @@ function ActionsInner() {
 
       <div className="flex-1 overflow-hidden flex flex-col">
         {tab === 'inbox'
-          ? <InboxTab gmailEmail={gmailEmail} />
+          ? <InboxTab gmailEmails={gmailEmails} />
           : <ContentTab />
         }
       </div>

@@ -7,9 +7,11 @@ export async function GET() {
     .from('connected_accounts')
     .select('provider, email');
 
-  const connected: Record<string, string | null> = {};
+  // Group by provider — array of emails per provider
+  const connected: Record<string, string[]> = {};
   for (const row of data || []) {
-    connected[row.provider] = row.email;
+    if (!connected[row.provider]) connected[row.provider] = [];
+    if (row.email) connected[row.provider].push(row.email);
   }
 
   return NextResponse.json({ connected });

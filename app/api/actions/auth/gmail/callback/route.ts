@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
       token_expiry: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
       email: userInfo.email ?? null,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'provider' });
+    }, { onConflict: 'provider,email' });
 
     return NextResponse.redirect(`${APP_URL}/dashboard/actions?connected=gmail`);
   } catch (err) {
