@@ -44,14 +44,13 @@ function extractText(payload: {
 export async function GET() {
   const supabase = createAdminSupabaseClient();
 
-  // Check if Gmail is connected
-  const { data: account } = await supabase
+  // Get all connected Gmail accounts
+  const { data: accounts } = await supabase
     .from('connected_accounts')
     .select('*')
-    .eq('provider', 'gmail')
-    .single();
+    .eq('provider', 'gmail');
 
-  if (!account) {
+  if (!accounts || accounts.length === 0) {
     return NextResponse.json({ connected: false, emails: [] });
   }
 
@@ -64,16 +63,24 @@ export async function GET() {
     .order('created_at', { ascending: false })
     .limit(30);
 
-  // Fetch fresh emails in background — return cache immediately if exists
+  // Fetch fresh emails from all accounts in background if cache exists
   if (cached && cached.length > 0) {
-    // Fire background refresh without awaiting
-    refreshEmails(account, supabase).catch(console.error);
+    Promise.all(accounts.map(a => refreshEmails(a, supabase))).catch(console.error);
     return NextResponse.json({ connected: true, emails: cached });
   }
 
-  // First load — fetch and summarize synchronously
-  const emails = await refreshEmails(account, supabase);
-  return NextResponse.json({ connected: true, emails });
+  // First load — fetch from all accounts synchronously
+  await Promise.all(accounts.map(a => refreshEmails(a, supabase)));
+
+  const { data: fresh } = await supabase
+    .from('email_summaries')
+    .select('*')
+    .eq('provider', 'gmail')
+    .eq('dismissed', false)
+    .order('created_at', { ascending: false })
+    .limit(30);
+
+  return NextResponse.json({ connected: true, emails: fresh || [] });
 }
 
 export async function DELETE(req: Request) {
@@ -118,7 +125,7 @@ async function refreshEmails(
   // Fetch up to 20 unread emails
   const { data: listData } = await gmail.users.messages.list({
     userId: 'me',
-    q: 'is:unread -category:promotions -category:social',
+    q: 'is:unread',
     maxResults: 20,
   });
 
