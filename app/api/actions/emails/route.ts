@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAdminSupabaseClient } from '@/lib/supabase-server';
+import { safeDecrypt } from '@/lib/encryption';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -10,9 +11,10 @@ function getOAuthClient(accessToken: string, refreshToken: string | null) {
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
   );
+  // Tokens are stored encrypted — decrypt before use
   client.setCredentials({
-    access_token: accessToken,
-    refresh_token: refreshToken ?? undefined,
+    access_token: safeDecrypt(accessToken) ?? accessToken,
+    refresh_token: refreshToken ? (safeDecrypt(refreshToken) ?? refreshToken) : undefined,
   });
   return client;
 }
