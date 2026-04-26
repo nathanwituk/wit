@@ -222,7 +222,7 @@ function DayCalendarView({
       if (!gridRect) return;
       const taskContainerY = (touch.clientY - d.touchOffset) - gridRect.top + scrollTop;
       const rawMins = taskContainerY / PX_PER_MIN + START_HOUR * 60;
-      const snapped = Math.min(Math.max(Math.round(rawMins / 30) * 30, START_HOUR * 60), (END_HOUR - 1) * 60);
+      const snapped = Math.min(Math.max(Math.round(rawMins / 15) * 15, START_HOUR * 60), (END_HOUR - 1) * 60);
       if (snapped !== d.snappedMins) {
         navigator.vibrate?.(8);
         setDrag(prev => prev ? { ...prev, snappedMins: snapped } : null);
