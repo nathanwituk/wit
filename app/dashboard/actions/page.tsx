@@ -67,126 +67,131 @@ function ConnectPrompt({ onConnect }: { onConnect: () => void }) {
   );
 }
 
-// ─── Email card ───────────────────────────────────────────────────────────────
+// ─── Trash icon ───────────────────────────────────────────────────────────────
+function TrashIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+      <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+    </svg>
+  );
+}
+
+// ─── Email card (Figma design) ────────────────────────────────────────────────
 function EmailCard({
   email,
+  zIndex,
   onDismiss,
   onAddTask,
 }: {
   email: EmailSummary;
-  onDismiss: (id: string, alsoInGmail: boolean) => void;
+  zIndex: number;
+  onDismiss: (id: string) => void;
   onAddTask: (task: NonNullable<EmailSummary['suggested_task']>) => void;
 }) {
-  const [showReply, setShowReply] = useState(false);
-  const [copied, setCopied] = useState(false);
-
   function openInGmail() {
     window.open(`https://mail.google.com/mail/u/0/#inbox/${email.email_id}`, '_blank');
   }
 
-  function copyReply() {
-    if (!email.draft_reply) return;
-    navigator.clipboard.writeText(email.draft_reply).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
-  }
-
   return (
-    <div className={`rounded-2xl border bg-[#0e0e0e] overflow-hidden transition-all ${
-      email.action_needed ? 'border-[#2a2a1a]' : 'border-[#1a1a1a]'
-    }`}>
-      {/* Header */}
-      <div className="px-4 pt-3.5 pb-3 flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            {email.action_needed && (
-              <span className="text-[9px] font-bold uppercase tracking-wider text-amber-500/80 bg-amber-500/10 px-1.5 py-0.5 rounded-md flex-shrink-0">
-                Action
-              </span>
-            )}
-            <p className="text-[#888] text-[11px] truncate">{email.sender_name || email.sender_email}</p>
-          </div>
-          <p className="text-white text-xs font-medium leading-snug truncate">{email.subject}</p>
-        </div>
-        {/* Dismiss */}
-        <button
-          onClick={() => onDismiss(email.id, false)}
-          className="w-6 h-6 flex items-center justify-center rounded-lg text-[#2a2a2a] hover:text-[#666] hover:bg-[#1a1a1a] transition-colors flex-shrink-0"
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+    <div
+      className="relative rounded-[20px] border border-[#1a1a1a] bg-[#0e0e0e] p-5 flex flex-col gap-2.5 shrink-0 w-full"
+      style={{ height: 198, marginBottom: -126, zIndex }}
+    >
+      {/* Title + summary */}
+      <div className="flex flex-col gap-1.5 flex-1 min-h-0 overflow-hidden">
+        <p className="text-white font-medium leading-snug" style={{ fontSize: 15 }}>
+          {email.subject || email.sender_name}
+        </p>
+        <p className="text-[#666] leading-relaxed overflow-hidden" style={{ fontSize: 13 }}>
+          {email.summary}
+        </p>
       </div>
 
-      {/* Summary */}
-      <p className="px-4 pb-3 text-[#666] text-xs leading-relaxed">{email.summary}</p>
-
-      {/* Draft reply */}
-      {showReply && email.draft_reply && (
-        <div className="mx-4 mb-3 bg-[#141414] border border-[#1e1e1e] rounded-xl p-3 relative">
-          <p className="text-[#777] text-[11px] leading-relaxed pr-6">{email.draft_reply}</p>
-          <button
-            onClick={copyReply}
-            className="absolute top-2.5 right-2.5 flex items-center gap-1 text-[10px] text-[#444] hover:text-white transition-colors"
-          >
-            {copied ? (
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
-            ) : (
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-              </svg>
-            )}
-          </button>
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="px-4 pb-3.5 flex items-center gap-2 flex-wrap">
+      {/* Action buttons */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Open */}
         <button
           onClick={openInGmail}
-          className="flex items-center gap-1.5 text-[11px] text-[#555] hover:text-white bg-[#141414] hover:bg-[#1e1e1e] px-3 py-1.5 rounded-lg transition-all"
+          className="flex items-center gap-2 bg-[#141414] rounded-full px-3 py-2 text-[#666] active:opacity-70 transition-opacity"
         >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
             <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
           </svg>
-          Open
+          <span className="text-xs font-semibold whitespace-nowrap">Open</span>
         </button>
 
-        {email.draft_reply && (
-          <button
-            onClick={() => setShowReply(p => !p)}
-            className={`flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg transition-all ${
-              showReply ? 'bg-[#1e1e1e] text-white' : 'text-[#555] hover:text-white bg-[#141414] hover:bg-[#1e1e1e]'
-            }`}
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>
-            </svg>
-            {showReply ? 'Hide reply' : 'Draft reply'}
-          </button>
-        )}
-
-        {email.suggested_task && (
+        {/* Add task — only on review emails with a suggestion */}
+        {email.action_needed && email.suggested_task && (
           <button
             onClick={() => onAddTask(email.suggested_task!)}
-            className="flex items-center gap-1.5 text-[11px] text-amber-500/70 hover:text-amber-400 bg-amber-500/5 hover:bg-amber-500/10 px-3 py-1.5 rounded-lg transition-all"
+            className="flex items-center justify-center bg-[#50532d] rounded-full px-3 py-2 active:opacity-70 transition-opacity"
           >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Add task
+            <span className="text-xs font-semibold text-[#daff6b] whitespace-nowrap">Add task</span>
           </button>
         )}
 
+        {/* Delete */}
         <button
-          onClick={() => onDismiss(email.id, true)}
-          className="ml-auto flex items-center gap-1.5 text-[10px] text-[#2a2a2a] hover:text-[#555] transition-colors"
+          onClick={() => onDismiss(email.id)}
+          className="flex items-center justify-center bg-[#391d1d] text-[#ff9696] rounded-full p-2 active:opacity-70 transition-opacity ml-auto"
         >
-          Delete from Gmail
+          <TrashIcon />
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Email column ─────────────────────────────────────────────────────────────
+function EmailColumn({
+  title,
+  emails,
+  onDismiss,
+  onDismissAll,
+  onAddTask,
+}: {
+  title: string;
+  emails: EmailSummary[];
+  onDismiss: (id: string) => void;
+  onDismissAll: () => void;
+  onAddTask: (task: NonNullable<EmailSummary['suggested_task']>) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3 w-[calc(50%-6px)] flex-shrink-0">
+      {/* Column header */}
+      <p className="text-white font-semibold text-center" style={{ fontSize: 17 }}>{title}</p>
+
+      {/* Delete All pill */}
+      <button
+        onClick={onDismissAll}
+        disabled={emails.length === 0}
+        className="flex items-center justify-center gap-2 bg-[#391d1d] rounded-full px-3 py-2.5 disabled:opacity-30 active:opacity-70 transition-opacity w-full"
+      >
+        <TrashIcon />
+        <span className="text-[#ff9696] text-xs font-semibold">Delete All</span>
+      </button>
+
+      {/* Stacked cards */}
+      {emails.length === 0 ? (
+        <p className="text-[#2a2a2a] text-xs text-center pt-4">Empty</p>
+      ) : (
+        <div
+          className="relative flex flex-col items-stretch"
+          style={{ paddingBottom: 126 }}
+        >
+          {emails.map((email, i) => (
+            <EmailCard
+              key={email.id}
+              email={email}
+              zIndex={emails.length - i}
+              onDismiss={onDismiss}
+              onAddTask={onAddTask}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -212,13 +217,24 @@ function InboxTab({ gmailEmails }: { gmailEmails: string[] }) {
     if (gmailEmails.length > 0) fetchEmails();
   }, [gmailEmails.length, fetchEmails]);
 
-  async function handleDismiss(id: string, alsoInGmail: boolean) {
+  async function handleDismiss(id: string) {
     setEmails(prev => prev.filter(e => e.id !== id));
     await fetch('/api/actions/emails', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ emailId: id, alsoInGmail }),
+      body: JSON.stringify({ emailId: id, alsoInGmail: false }),
     });
+  }
+
+  async function handleDismissAll(ids: string[]) {
+    setEmails(prev => prev.filter(e => !ids.includes(e.id)));
+    await Promise.all(ids.map(id =>
+      fetch('/api/actions/emails', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailId: id, alsoInGmail: false }),
+      })
+    ));
   }
 
   async function handleAddTask(task: NonNullable<EmailSummary['suggested_task']>) {
@@ -241,80 +257,85 @@ function InboxTab({ gmailEmails }: { gmailEmails: string[] }) {
     return <ConnectPrompt onConnect={() => { window.location.href = '/api/actions/auth/gmail'; }} />;
   }
 
+  // Split into two columns
+  const toDelete = emails.filter(e => !e.action_needed);
+  const toReview = emails.filter(e => e.action_needed);
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      {/* Connected accounts header */}
-      <div className="px-5 py-3 border-b border-[#141414] flex-shrink-0">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            <p className="text-[#444] text-[10px] uppercase tracking-wider font-medium">Connected</p>
+      {/* Connected accounts bar */}
+      <div className="px-4 py-2.5 border-b border-[#141414] flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+          <div className="flex gap-1.5 flex-wrap min-w-0">
+            {gmailEmails.map(e => (
+              <span key={e} className="text-[10px] text-[#444] truncate max-w-[120px]">{e}</span>
+            ))}
           </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={fetchEmails} className="text-[#2a2a2a] hover:text-[#666] transition-colors p-1">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+          </button>
           <button
             onClick={() => { window.location.href = '/api/actions/auth/gmail'; }}
-            className="flex items-center gap-1.5 text-[11px] text-[#444] hover:text-white bg-[#141414] hover:bg-[#1e1e1e] px-2.5 py-1.5 rounded-lg transition-all"
+            className="text-[#2a2a2a] hover:text-[#666] transition-colors text-[11px] font-medium"
           >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Add account
+            + Add
           </button>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {gmailEmails.map(email => (
-            <span key={email} className="text-[10px] text-[#555] bg-[#141414] px-2.5 py-1 rounded-lg truncate max-w-[200px]">{email}</span>
-          ))}
-        </div>
-      </div>
-
-      {/* Refresh + actions row */}
-      <div className="px-5 py-2 border-b border-[#0e0e0e] flex items-center justify-end flex-shrink-0">
-        <div>
-        <button
-          onClick={fetchEmails}
-          className="text-[#333] hover:text-[#888] transition-colors"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-          </svg>
-        </button>
         </div>
       </div>
 
       {/* Task added toast */}
       {taskAdded && (
-        <div className="mx-5 mt-3 flex-shrink-0 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-2.5 flex items-center gap-2">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <div className="mx-4 mt-2.5 flex-shrink-0 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2 flex items-center gap-2">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
           <p className="text-emerald-400 text-xs">Added: {taskAdded}</p>
         </div>
       )}
 
-      {/* Email list */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3">
-        {loading && emails.length === 0 && (
-          <div className="flex flex-col items-center justify-center gap-3 py-16">
-            <svg className="animate-spin text-[#333]" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-            </svg>
-            <p className="text-[#333] text-xs">Reading your inbox...</p>
+      {/* Loading */}
+      {loading && emails.length === 0 && (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 flex-1">
+          <svg className="animate-spin text-[#333]" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+          </svg>
+          <p className="text-[#333] text-xs">Reading your inbox...</p>
+        </div>
+      )}
+
+      {/* Empty */}
+      {!loading && emails.length === 0 && (
+        <div className="flex flex-col items-center justify-center gap-2 py-16 flex-1 text-center">
+          <p className="text-[#2a2a2a] text-sm">Inbox clear</p>
+          <p className="text-[#1e1e1e] text-xs">No unread emails right now</p>
+        </div>
+      )}
+
+      {/* Two-column layout */}
+      {emails.length > 0 && (
+        <div className="flex-1 overflow-y-auto px-4 pt-4 pb-8">
+          <div className="flex gap-3 items-start">
+            <EmailColumn
+              title="To Delete"
+              emails={toDelete}
+              onDismiss={handleDismiss}
+              onDismissAll={() => handleDismissAll(toDelete.map(e => e.id))}
+              onAddTask={handleAddTask}
+            />
+            <EmailColumn
+              title="To Review"
+              emails={toReview}
+              onDismiss={handleDismiss}
+              onDismissAll={() => handleDismissAll(toReview.map(e => e.id))}
+              onAddTask={handleAddTask}
+            />
           </div>
-        )}
-        {!loading && emails.length === 0 && (
-          <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-            <p className="text-[#2a2a2a] text-sm">Inbox clear</p>
-            <p className="text-[#222] text-xs">No unread emails that need your attention</p>
-          </div>
-        )}
-        {emails.map(email => (
-          <EmailCard
-            key={email.id}
-            email={email}
-            onDismiss={handleDismiss}
-            onAddTask={handleAddTask}
-          />
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

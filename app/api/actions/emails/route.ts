@@ -181,8 +181,13 @@ async function refreshEmails(
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 400,
           system: `You are Nathan's email assistant. Analyze emails and respond with JSON only.
-Output: { "summary": "1-2 sentence plain English summary of what this email is actually about", "action_needed": true/false, "suggested_task": null or { "title": "...", "category": "...", "priority": "..." }, "draft_reply": null or "short professional reply if reply is needed" }
-Be direct. Skip pleasantries in summaries. action_needed = true only if Nathan must do something.`,
+Output: { "summary": "1-2 sentence plain English summary", "action_needed": true/false, "suggested_task": null or { "title": "...", "category": "admin|code|design|school|personal", "priority": "urgent|high|medium|low" }, "draft_reply": null or "short reply if needed" }
+
+Classification rules:
+- action_needed = FALSE (To Delete): newsletters, promotions, notifications, receipts, automated emails, no-reply senders, marketing, social media alerts
+- action_needed = TRUE (To Review): real humans emailing Nathan directly, deadlines, assignments, meeting requests, job/internship emails, professor emails, anything requiring a response or action
+
+Be aggressive about marking things as To Delete. If in doubt, it's To Delete.`,
           messages: [{
             role: 'user',
             content: `From: ${from}\nSubject: ${subject}\n\n${body}`,
