@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/seed-recurring",
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/overnight-schedule",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

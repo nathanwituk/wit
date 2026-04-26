@@ -168,9 +168,20 @@ export async function POST(req: NextRequest) {
       fetchTodaysTasks(todaysDate),
     ]);
 
+    // Check if overnight scheduling ran for today
+    const supabaseCtx = createAdminSupabaseClient();
+    const { data: overnightLog } = await supabaseCtx
+      .from('memories')
+      .select('value')
+      .eq('category', 'daily_log')
+      .eq('key', 'overnight_plan_date')
+      .single();
+    const overnightRanToday = overnightLog?.value === todaysDate;
+
     const fullContext = [
       memoriesContext,
       `## Today's Schedule (${todaysDate})\nFormat: [task_id] time | title | category | status | duration\n${todaysTasks}`,
+      overnightRanToday ? 'overnight_plan_ready' : '',
       extraContext,
     ]
       .filter(Boolean)

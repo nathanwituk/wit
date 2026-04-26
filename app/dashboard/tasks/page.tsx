@@ -719,7 +719,7 @@ function SuggestionCard({
   }
 
   return (
-    <div className={`flex-shrink-0 w-72 rounded-2xl border p-4 flex flex-col gap-3 transition-all duration-300 ${
+    <div className={`flex-shrink-0 w-56 rounded-2xl border p-3 flex flex-col gap-2 transition-all duration-300 ${
       state === 'added' ? 'border-white/20 bg-white/5 scale-[0.97] opacity-60' : 'border-[#1e1e1e] bg-[#141414]'
     }`}>
       <div className="flex items-start justify-between gap-2">
@@ -729,7 +729,6 @@ function SuggestionCard({
           {suggestion.priority}
         </span>
       </div>
-      {suggestion.why && <p className="text-[#555] text-xs leading-relaxed">{suggestion.why}</p>}
 
       <div className="flex flex-wrap gap-1.5">
         <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1e1e1e] text-[#666]">{ENERGY_LABEL[suggestion.energy_level]}</span>
@@ -948,6 +947,169 @@ function QuickCreateModal({ time, date, onSave, onClose }: {
   );
 }
 
+// ─── Routines Modal ───────────────────────────────────────────────────────────
+const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const DAY_FULL   = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+interface RecurringTemplate {
+  id: string;
+  title: string;
+  category: string;
+  scheduled_time?: string;
+  estimated_minutes: number;
+  energy_level: string;
+  days_of_week: number[];
+}
+
+function RoutinesModal({ onClose }: { onClose: () => void }) {
+  const [templates, setTemplates] = useState<RecurringTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({
+    title: '', category: 'personal', scheduled_time: '09:00',
+    estimated_minutes: 60, energy_level: 'light_work', days_of_week: [] as number[],
+  });
+
+  useEffect(() => {
+    fetch('/api/recurring')
+      .then(r => r.json())
+      .then(d => setTemplates(d.templates || []))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleAdd() {
+    if (!form.title.trim() || form.days_of_week.length === 0) return;
+    setAdding(true);
+    const res = await fetch('/api/recurring', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
+    });
+    const d = await res.json();
+    if (d.template) setTemplates(prev => [...prev, d.template]);
+    setForm({ title: '', category: 'personal', scheduled_time: '09:00', estimated_minutes: 60, energy_level: 'light_work', days_of_week: [] });
+    setAdding(false);
+  }
+
+  async function handleDelete(id: string) {
+    setTemplates(prev => prev.filter(t => t.id !== id));
+    await fetch(`/api/recurring?id=${id}`, { method: 'DELETE' });
+  }
+
+  function toggleDay(d: number) {
+    setForm(prev => ({
+      ...prev,
+      days_of_week: prev.days_of_week.includes(d)
+        ? prev.days_of_week.filter(x => x !== d)
+        : [...prev.days_of_week, d].sort(),
+    }));
+  }
+
+  function formatDays(days: number[]) {
+    if (days.length === 7) return 'Every day';
+    if (days.length === 0) return '';
+    return days.map(d => DAY_FULL[d]).join(', ');
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-sm bg-[#141414] rounded-t-3xl border-t border-x border-[#2a2a2a] p-5 flex flex-col gap-4 max-h-[85vh] overflow-y-auto">
+
+        <div className="flex items-center justify-between">
+          <p className="text-white text-sm font-semibold">Routines</p>
+          <button onClick={onClose} className="text-[#444] hover:text-[#888] transition-colors">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Existing routines */}
+        {loading ? (
+          <div className="flex flex-col gap-2">
+            {[1,2,3].map(i => <div key={i} className="h-14 bg-[#1e1e1e] rounded-xl animate-pulse" />)}
+          </div>
+        ) : templates.length === 0 ? (
+          <p className="text-[#333] text-xs text-center py-2">No routines yet</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {templates.map(t => (
+              <div key={t.id} className="flex items-center gap-3 bg-[#1a1a1a] rounded-xl px-3 py-2.5">
+                <div className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: CATEGORY_COLOR[t.category] || '#6b7280' }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-xs font-medium truncate">{t.title}</p>
+                  <p className="text-[#444] text-[10px] mt-0.5">
+                    {t.scheduled_time} · {formatDays(t.days_of_week)}
+                  </p>
+                </div>
+                <button onClick={() => handleDelete(t.id)}
+                  className="text-[#333] hover:text-red-500 transition-colors flex-shrink-0">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="border-t border-[#1e1e1e] pt-3 flex flex-col gap-3">
+          <p className="text-[#444] text-[10px] uppercase tracking-wider font-semibold">Add Routine</p>
+
+          <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+            placeholder="Routine name"
+            className="bg-[#1e1e1e] text-white text-sm rounded-xl px-4 py-3 outline-none border border-[#2a2a2a] placeholder:text-[#444]" />
+
+          {/* Day picker */}
+          <div className="flex gap-1.5">
+            {DAY_LABELS.map((label, i) => (
+              <button key={i} onClick={() => toggleDay(i)}
+                className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
+                  form.days_of_week.includes(i)
+                    ? 'bg-white text-[#0a0a0a]'
+                    : 'bg-[#1e1e1e] text-[#444] hover:text-[#888]'
+                }`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-2">
+            <input type="time" value={form.scheduled_time}
+              onChange={e => setForm(p => ({ ...p, scheduled_time: e.target.value }))}
+              className="flex-1 bg-[#1e1e1e] text-white text-sm rounded-xl px-3 py-2.5 outline-none border border-[#2a2a2a]" />
+            <input type="number" value={form.estimated_minutes}
+              onChange={e => setForm(p => ({ ...p, estimated_minutes: parseInt(e.target.value) || 60 }))}
+              placeholder="mins"
+              className="w-20 bg-[#1e1e1e] text-white text-sm rounded-xl px-3 py-2.5 outline-none border border-[#2a2a2a] placeholder:text-[#444]" />
+          </div>
+
+          <div className="flex gap-2">
+            <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+              className="flex-1 bg-[#1e1e1e] text-white text-sm rounded-xl px-3 py-2.5 outline-none border border-[#2a2a2a]">
+              {['design','code','school','fitness','personal','content','admin'].map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select value={form.energy_level} onChange={e => setForm(p => ({ ...p, energy_level: e.target.value }))}
+              className="flex-1 bg-[#1e1e1e] text-white text-sm rounded-xl px-3 py-2.5 outline-none border border-[#2a2a2a]">
+              <option value="deep_focus">Deep Focus</option>
+              <option value="light_work">Light Work</option>
+              <option value="quick_win">Quick Win</option>
+            </select>
+          </div>
+
+          <button onClick={handleAdd} disabled={adding || !form.title.trim() || form.days_of_week.length === 0}
+            className="bg-white text-[#0a0a0a] text-sm font-semibold rounded-xl py-2.5 disabled:opacity-40 disabled:cursor-not-allowed">
+            {adding ? 'Adding…' : 'Add Routine'}
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -959,6 +1121,7 @@ export default function TasksPage() {
   const [showDone, setShowDone] = useState(true);
   const [quickCreate, setQuickCreate] = useState<{ time: string } | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [showRoutines, setShowRoutines] = useState(false);
 
   useEffect(() => {
     fetchTasks();
@@ -1156,7 +1319,7 @@ export default function TasksPage() {
   const isToday_ = selectedDate === localDateStr();
 
   return (
-    <div className="flex flex-col h-full min-h-screen bg-[#0a0a0a] overflow-hidden">
+    <div className="flex flex-col h-full bg-[#0a0a0a] overflow-hidden">
 
       {/* Header */}
       <div className="px-5 pt-6 pb-3 flex-shrink-0">
@@ -1166,6 +1329,14 @@ export default function TasksPage() {
             <p className="text-[#444] text-xs mt-0.5">{activeCount} active</p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Routines button */}
+            <button onClick={() => setShowRoutines(true)}
+              className="w-8 h-8 rounded-full bg-[#141414] border border-[#1e1e1e] flex items-center justify-center hover:border-[#333] transition-colors">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2" strokeLinecap="round">
+                <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+              </svg>
+            </button>
             {/* View toggle */}
             <div className="flex items-center bg-[#141414] border border-[#1e1e1e] rounded-xl p-1 gap-1">
               <button onClick={() => setView('calendar')}
@@ -1232,35 +1403,9 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {/* Suggestions strip */}
-      {(loadingSuggestions || suggestions.length > 0) && (
-        <div className="pb-3 flex-shrink-0">
-          <p className="text-xs font-semibold uppercase tracking-wider text-[#444] px-5 mb-3">✨ Suggested</p>
-          {loadingSuggestions ? (
-            <div className="px-5 flex gap-3">
-              {[1,2,3].map(i => <div key={i} className="flex-shrink-0 w-64 h-28 bg-[#141414] rounded-2xl border border-[#1e1e1e] animate-pulse" />)}
-            </div>
-          ) : (
-            <div className="flex gap-3 overflow-x-auto px-5 pb-1 scrollbar-hide">
-              {suggestions.map((s, i) => {
-                // Pre-calculate staggered slots so cards don't suggest the same time
-                const reserved: Array<{start: number; end: number}> = [];
-                for (let j = 0; j < i; j++) {
-                  const slot = findNextAvailableSlot(tasks, localDateStr(), suggestions[j].estimated_minutes || 30, reserved);
-                  const start = timeToMinutes(slot);
-                  reserved.push({ start, end: start + (suggestions[j].estimated_minutes || 30) });
-                }
-                const suggestedTime = findNextAvailableSlot(tasks, localDateStr(), s.estimated_minutes || 30, reserved);
-                return <SuggestionCard key={i} suggestion={s} suggestedTime={suggestedTime} onAdd={addSuggestion} />;
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Main view */}
+      {/* Main view (60%) — fills remaining space, scrollable */}
       {loadingTasks ? (
-        <div className="px-5 flex flex-col gap-3 pb-8">
+        <div className="px-5 flex flex-col gap-3 pb-8 flex-1">
           {[1,2,3].map(i => <div key={i} className="h-20 bg-[#141414] rounded-2xl border border-[#1e1e1e] animate-pulse" />)}
         </div>
       ) : view === 'calendar' ? (
@@ -1273,7 +1418,7 @@ export default function TasksPage() {
           onEdit={(task) => setEditingTask(task)}
         />
       ) : (
-        <div className="px-5 flex flex-col gap-6 pb-8 overflow-y-auto flex-1">
+        <div className="px-5 flex flex-col gap-6 pb-4 overflow-y-auto flex-1 min-h-0">
           <Section label="⚠ Overdue" items={grouped.overdue} color="#ef4444" />
           <Section label="Today" items={grouped.today} color="#ffffff" />
           <Section label="Upcoming" items={grouped.upcoming} color="#6b7280" />
@@ -1311,6 +1456,31 @@ export default function TasksPage() {
         </div>
       )}
 
+      {/* Suggestions strip (20%) — fixed at bottom above nav */}
+      {(loadingSuggestions || suggestions.length > 0) && (
+        <div className="flex-shrink-0 border-t border-[#141414] pt-3 pb-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-[#444] px-5 mb-2">✨ Suggested</p>
+          {loadingSuggestions ? (
+            <div className="px-5 flex gap-3">
+              {[1,2,3].map(i => <div key={i} className="flex-shrink-0 w-56 h-24 bg-[#141414] rounded-2xl border border-[#1e1e1e] animate-pulse" />)}
+            </div>
+          ) : (
+            <div className="flex gap-3 overflow-x-auto px-5 pb-1 scrollbar-hide">
+              {suggestions.map((s, i) => {
+                const reserved: Array<{start: number; end: number}> = [];
+                for (let j = 0; j < i; j++) {
+                  const slot = findNextAvailableSlot(tasks, localDateStr(), suggestions[j].estimated_minutes || 30, reserved);
+                  const start = timeToMinutes(slot);
+                  reserved.push({ start, end: start + (suggestions[j].estimated_minutes || 30) });
+                }
+                const suggestedTime = findNextAvailableSlot(tasks, localDateStr(), s.estimated_minutes || 30, reserved);
+                return <SuggestionCard key={i} suggestion={s} suggestedTime={suggestedTime} onAdd={addSuggestion} />;
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Quick create modal */}
       {quickCreate && (
         <QuickCreateModal
@@ -1330,6 +1500,9 @@ export default function TasksPage() {
           onClose={() => setEditingTask(null)}
         />
       )}
+
+      {/* Routines modal */}
+      {showRoutines && <RoutinesModal onClose={() => setShowRoutines(false)} />}
     </div>
   );
 }

@@ -20,6 +20,8 @@ ${extraContext ? `## Current Context\n${extraContext}` : ''}
 ## Today's Date
 ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
 
+${extraContext?.includes('overnight_plan_ready') ? '## Schedule Note\nNathan\'s schedule was pre-optimized overnight. When he asks about his day, reference the existing calendar rather than replanning from scratch.' : ''}
+
 ## Scheduling Intelligence
 You have direct access to Nathan's schedule via tools. Use them proactively — this is the core of what makes you useful.
 

@@ -60,12 +60,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col">
-      <div className="flex-1 overflow-hidden flex flex-col pb-16">
+      <div className="flex-1 overflow-hidden flex flex-col pb-20">
         {children}
       </div>
 
       {/* Bottom tab bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-[#0a0a0a] border-t border-[#1a1a1a] flex">
+      <div className="fixed bottom-2.5 left-0 right-0 bg-[#0a0a0a] border-t border-[#1a1a1a] flex">
         {TABS.map(tab => {
           const isActive = tab.href === '/dashboard'
             ? pathname === '/dashboard'

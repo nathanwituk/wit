@@ -89,8 +89,16 @@ function EmailCard({
   onDismiss: (id: string) => void;
   onAddTask: (task: NonNullable<EmailSummary['suggested_task']>) => void;
 }) {
+  const [taskAdded, setTaskAdded] = useState(false);
+
   function openInGmail() {
     window.open(`https://mail.google.com/mail/u/0/#inbox/${email.email_id}`, '_blank');
+  }
+
+  function handleAdd() {
+    if (taskAdded || !email.suggested_task) return;
+    setTaskAdded(true);
+    onAddTask(email.suggested_task);
   }
 
   return (
@@ -110,25 +118,39 @@ function EmailCard({
 
       {/* Action buttons */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        {/* Open */}
+        {/* Open — icon only */}
         <button
           onClick={openInGmail}
-          className="flex items-center gap-2 bg-[#141414] rounded-full px-3 py-2 text-[#666] active:opacity-70 transition-opacity"
+          className="flex items-center justify-center bg-[#141414] rounded-full p-2.5 text-[#666] active:opacity-70 transition-opacity"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
             <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
           </svg>
-          <span className="text-xs font-semibold whitespace-nowrap">Open</span>
         </button>
 
-        {/* Add task — only on review emails with a suggestion */}
+        {/* Add task — + task */}
         {email.action_needed && email.suggested_task && (
           <button
-            onClick={() => onAddTask(email.suggested_task!)}
-            className="flex items-center justify-center bg-[#50532d] rounded-full px-3 py-2 active:opacity-70 transition-opacity"
+            onClick={handleAdd}
+            disabled={taskAdded}
+            className={`flex items-center gap-1 rounded-full px-3 py-2 transition-all ${
+              taskAdded
+                ? 'bg-emerald-500/15 cursor-default'
+                : 'bg-[#50532d] active:opacity-70'
+            }`}
           >
-            <span className="text-xs font-semibold text-[#daff6b] whitespace-nowrap">Add task</span>
+            {taskAdded ? (
+              <>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <span className="text-emerald-400 text-xs font-semibold whitespace-nowrap">added</span>
+              </>
+            ) : (
+              <>
+                <span className="text-[#daff6b] text-sm font-semibold leading-none">+</span>
+                <span className="text-[#daff6b] text-xs font-semibold whitespace-nowrap">task</span>
+              </>
+            )}
           </button>
         )}
 
@@ -238,6 +260,7 @@ function InboxTab({ gmailEmails }: { gmailEmails: string[] }) {
   }
 
   async function handleAddTask(task: NonNullable<EmailSummary['suggested_task']>) {
+    const today = new Date().toISOString().slice(0, 10);
     await fetch('/api/tasks/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -247,6 +270,8 @@ function InboxTab({ gmailEmails }: { gmailEmails: string[] }) {
         priority: task.priority || 'medium',
         status: 'todo',
         source: 'email',
+        due_date: today,
+        localDate: today,
       }),
     });
     setTaskAdded(task.title);
